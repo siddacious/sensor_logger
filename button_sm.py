@@ -33,8 +33,12 @@ class ButtonStateMachine:
         self._backlight = 0.4
         self._button_states = {}
         self._init_button_state()
-        self._button_states['select'].handler = self._decr_backlight
-        self._button_states['start'].handler = self._incr_backlight
+        self.set_handler('select', self._decr_backlight)
+        self.set_handler('start', self._incr_backlight)
+
+    def set_handler(self, name, handler):
+        """Set the handler for the given button name"""
+        self._button_states[name].handler = handler
 
     def _init_button_state(self):
         for idx, button_name in enumerate(["b", "a", "start", "select", "right", "down", "up", "left"]):
@@ -44,9 +48,9 @@ class ButtonStateMachine:
                 mask=mask,
             )
     def _incr_backlight(self, button_state):
-        self._backlight = min(self._backlight + 0.2, 1.0)
+        self._backlight = min(self._backlight + 0.1, 1.0)
     def _decr_backlight(self, button_state):
-        self._backlight = max(self._backlight - 0.2, 0.0)
+        self._backlight = max(self._backlight - 0.1, 0.0)
 
     def _service_buttons(self):
         pressed = self._buttons.get_pressed()
