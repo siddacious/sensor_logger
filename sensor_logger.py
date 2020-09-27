@@ -11,14 +11,31 @@ from adafruit_io.adafruit_io import IO_HTTP, AdafruitIO_RequestError
 from adafruit_motorkit import MotorKit
 # import adafruit_bmp280
 # import adafruit_sht31d
+from gamepadshift import GamePadShift
+
 from adafruit_bme680 import Adafruit_BME680_I2C as PHT_SENSOR
 import time
 import analogio
+from collections import namedtuple
+import digitalio
 
+import rtc
 """Simple test for using adafruit_motorkit with a DC motor"""
-import time
+try:
+    board.DISPLAY.brightness = 0
+except AttributeError as attr:
+    pass
 
-
+# Button Constants
+BUTTON_LEFT = const(128)
+BUTTON_UP = const(64)
+BUTTON_DOWN = const(32)
+BUTTON_RIGHT = const(16)
+BUTTON_SELECT = const(8)
+BUTTON_START = const(4)
+BUTTON_A = const(2)
+BUTTON_B = const(1)
+Buttons = namedtuple("Buttons", "b a start select right down up left")
 
 i2c = board.I2C()
 # kit = MotorKit(i2c=i2c)
@@ -28,8 +45,52 @@ i2c = board.I2C()
 # kit.motor1.throttle = 0
 
 # time.sleep(1)
+_buttons = GamePadShift(
+    digitalio.DigitalInOut(board.BUTTON_CLOCK),
+    digitalio.DigitalInOut(board.BUTTON_OUT),
+    digitalio.DigitalInOut(board.BUTTON_LATCH),
+)
+#####################
+_light_sensor = analogio.AnalogIn(board.A7)
 
 
+def button():
+
+    return Buttons(
+        *[
+            _buttons.get_pressed() & button
+            for button in (
+                BUTTON_B,
+                BUTTON_A,
+                BUTTON_START,
+                BUTTON_SELECT,
+                BUTTON_RIGHT,
+                BUTTON_DOWN,
+                BUTTON_UP,
+                BUTTON_LEFT,
+            )
+        ]
+    )
+
+import rtc
+
+def _curr_time_str():
+    current_time = time.localtime()
+    current_time.tm_hour
+    current_time.tm_min
+    current_time.tm_sec
+
+# TODOS:
+# get time from IO
+# log errors to txt file
+# log errors to screen
+# show current tmp/hum in big nums
+#auto dim after delay
+#brighten on movement/button press
+# show RSSI on screen
+# if button().BUTTON_A:
+#     print("AAAAAAay")
+####################
 def volts(analog_in):
     return 2*3.3*(analog_in.value/65535)
 class SensorLogger:
@@ -58,6 +119,7 @@ class SensorLogger:
         self.temperature_feed = None
         self.humidity_feed = None
         self.batt_volts_feed = None
+
     def _log_exceptions(func):
         # pylint:disable=protected-access
         def _decorator(self, *args, **kwargs):
@@ -66,7 +128,7 @@ class SensorLogger:
                 retval = func(self, *args, **kwargs)
                 return retval
             except Exception as e:
-                err_str = "error in %s\n%s\n"%(func.__name__, e)
+                err_str = "ERROR in %s\n%s\n"%(func.__name__, e)
                 if self._settings['log_errors_to_file']:
                     import storage
                     storage.remount("/", False)
@@ -107,7 +169,7 @@ class SensorLogger:
         status_light = neopixel.NeoPixel(board.NEOPIXEL, 1, brightness=0.2)
         self.wifi = adafruit_esp32spi_wifimanager.ESPSPI_WiFiManager(self._esp, self._secrets, status_light)
 
-    # @_log_exceptions
+    @_log_exceptions
     def _initialize_io(self):
         # aio_username = self._secrets["aio_username"]
         # aio_key = self._secrets["aio_key"]
@@ -116,7 +178,10 @@ class SensorLogger:
 
         # Create an instance of the Adafruit IO HTTP client
         self.io = IO_HTTP(aio_username, aio_key, self.wifi)
-        self._initialize_feeds(): 
+        clock = rtc.RTC()
+        clock.datetime = self.io.receive_time()
+        self._initialize_feeds()
+
     @_log_exceptions
     def _initialize_feeds(self):
         self.temperature_feed = self.io.get_feed("temperature")
@@ -156,9 +221,8 @@ class SensorLogger:
         # self.io.send_data(self.batt_volts_feed["key"], bv)
         print("Data sent!")
 
-print("shpongle")
 if __name__ == "__main__":
-    print("yes, __main__")
+
     last_write = time.monotonic()
     logger = SensorLogger(i2c_bus=i2c)
     while True:
