@@ -19,40 +19,29 @@ BUTTON_B = const(1)
 class ButtonState:
     def __init__ (self, name, mask, level=False, handler=None):
         self.name = name
-        self.mask=mask
+        self.mask = mask
         self.level = level
         self.handler = handler
 class ButtonStateMachine:
-    def __init__(self):
-        self._buttons = GamePadShift(
-            digitalio.DigitalInOut(board.BUTTON_CLOCK),
-            digitalio.DigitalInOut(board.BUTTON_OUT),
-            digitalio.DigitalInOut(board.BUTTON_LATCH),
-        )
-        self._display = board.DISPLAY
-        self._backlight = 0.4
+    def __init__(self, buttons, ordered_button_names):
+        self._buttons = buttons
         self._button_states = {}
-        self._init_button_state()
-        self.set_handler('select', self._decr_backlight)
-        self.set_handler('start', self._incr_backlight)
+        self._init_button_state(ordered_button_names)
+
+
 
     def set_handler(self, name, handler):
         """Set the handler for the given button name"""
         self._button_states[name].handler = handler
 
-    def _init_button_state(self):
-        for idx, button_name in enumerate(["b", "a", "start", "select", "right", "down", "up", "left"]):
+    def _init_button_state(self, ordered_button_names):
+        for idx, button_name in enumerate(ordered_button_names):
             mask = 1<<idx
             self._button_states[button_name] = ButtonState(
                 name=button_name,
                 mask=mask,
             )
-    def _incr_backlight(self, button_state):
-        self._backlight = min(self._backlight + 0.1, 1.0)
-    def _decr_backlight(self, button_state):
-        self._backlight = max(self._backlight - 0.1, 0.0)
-
-    def _service_buttons(self):
+    def service(self):
         pressed = self._buttons.get_pressed()
         for name, state in self._button_states.items():
             button_mask = state.mask
@@ -64,17 +53,33 @@ class ButtonStateMachine:
                     state.handler(state)
             elif not is_pressed and state.level:
                 self._button_states[name].level = is_pressed
-    def _service_screen(self):
+
+class ScreenTest:
+    def __init__(self):
+        self._display = board.DISPLAY
+        self._backlight = 0.4
+    def incr_backlight(self, button_state):
+        print("incr")
+        self._backlight = min(self._backlight + 0.1, 1.0)
+    def decr_backlight(self, button_state):
+        print("decr")
+        self._backlight = max(self._backlight - 0.1, 0.0)
+    def service(self):
         self._display.brightness = self._backlight
 
-
-    def service(self):
-
-        self._service_buttons()
-        self._service_screen()
-
 if __name__ == "__main__":
-    tester = ButtonStateMachine()
+    buttons = GamePadShift(
+            digitalio.DigitalInOut(board.BUTTON_CLOCK),
+            digitalio.DigitalInOut(board.BUTTON_OUT),
+            digitalio.DigitalInOut(board.BUTTON_LATCH),
+    )
+
+    button_names = ["b", "a", "start", "select", "right", "down", "up", "left"]
+    tester = ButtonStateMachine(buttons, button_names)
+    screen_machine = ScreenTest()
+    tester.set_handler('select', screen_machine.decr_backlight)
+    tester.set_handler('start', screen_machine.incr_backlight)
     while True:
         tester.service()
+        screen_machine.service()
         sleep(0.01)
